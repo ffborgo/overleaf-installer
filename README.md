@@ -11,9 +11,10 @@ Este script simplifica la configuración de Docker, la generación de secretos c
       * Generación automática de `SESSION_SECRET` y `JWT_SECRET` seguros.
       * Validación estricta de IPs y Hostnames (evita inyección de comandos).
       * Descarga segura de dependencias (verifica permisos en Linux).
-  * **🌐 Soporte Remoto (Tailscale):** Integración nativa para instalar y configurar Tailscale en Linux, facilitando la colaboración remota segura sin abrir puertos en tu router.
+  * **🌐 Soporte Remoto (Tailscale):** Integración nativa para instalar y configurar Tailscale en Linux (con auto-detección de IP), facilitando la colaboración remota segura.
   * **🐳 Docker Inteligente:** Detecta y utiliza automáticamente `docker compose` (V2) o `docker-compose` (V1).
-  * **🛡️ Verificaciones de Salud:** Comprueba si Docker está corriendo y si el puerto 8080 está libre antes de iniciar.
+  * **🛡️ Verificaciones de Salud:** Comprueba si Docker está corriendo y si el puerto elegido está libre antes de iniciar.
+  * **⚙️ Puerto Configurable:** Permite elegir el puerto de la aplicación, con `8080` como valor por defecto.
 
 ## 📋 Requisitos Previos
 
@@ -52,11 +53,11 @@ El script automatiza los siguientes pasos manuales y tediosos:
 
   * **Tamaño de Descarga:** La primera vez que corras el instalador, Docker descargará cerca de **4GB** de datos (debido a la instalación completa de LaTeX). Ten paciencia.
   * **Windows:** Si usas Windows, el script abrirá el navegador para que instales Tailscale manualmente si eliges el modo remoto.
-  * **Puerto:** Por defecto utiliza el puerto `8080`. Si está ocupado, el script te avisará.
+  * **Puerto:** El script te permitirá elegir el puerto. Por defecto, utiliza el `8080`. Si está ocupado, te avisará.
 
 ## 🤝 Contribuciones
 
-¡Las contribuciones son bienvenidas\! Si encuentras un bug o quieres mejorar la detección de distros, siéntete libre de abrir un Pull Request.
+Las contribuciones son bienvenidas, si encuentras un bug o queres mejorar la detección de distros, sentite libre de abrir un Pull Request.
 
 ## 📄 Licencia
 

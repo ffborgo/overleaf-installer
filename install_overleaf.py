@@ -48,7 +48,6 @@ class Colors:
 REPO_URL = "https://github.com/overleaf/toolkit.git"
 DIR_NAME = "overleaf-toolkit"
 DEFAULT_PORT = 8080
-EXPECTED_COMMIT = None 
 
 # ============================================
 # 🛠️ FUNCIONES DE UTILIDAD
@@ -103,11 +102,42 @@ def validate_input(input_str):
     return None
 
 def check_port_availability(port):
-    """Verifica si el puerto está libre antes de intentar levantar Docker."""
+    """Verifica si un puerto está disponible."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1) # Timeout para no colgar el script
-        result = s.connect_ex(('127.0.0.1', port))
-        return result != 0 # Retorna True si está ocupado
+        s.settimeout(1)
+        return s.connect_ex(('127.0.0.1', port)) != 0
+
+def get_port():
+    """Solicita al usuario un puerto y lo valida."""
+    while True:
+        port_str = input(f"👉 Introduce el puerto a usar (Enter para {DEFAULT_PORT}): ").strip()
+        if not port_str:
+            return DEFAULT_PORT
+        try:
+            port = int(port_str)
+            if 1 <= port <= 65535:
+                return port
+            else:
+                Colors.print_warning("El puerto debe estar entre 1 y 65535.")
+        except ValueError:
+            Colors.print_warning("Por favor, introduce un número válido.")
+
+def get_tailscale_ip():
+    """Intenta obtener la IP de Tailscale en Linux."""
+    if not sys.platform.startswith("linux"):
+        return ""
+    try:
+        # Ejecuta 'tailscale ip -4' y captura la salida
+        result = subprocess.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Si el comando falla o no se encuentra, no hace nada
+        return ""
 
 # ============================================
 # 🌐 GESTIÓN DE TAILSCALE
@@ -152,17 +182,6 @@ def git_clone_and_verify():
         Colors.print_info(f"La carpeta '{DIR_NAME}' ya existe. Usando versión actual.")
 
     os.chdir(DIR_NAME)
-
-    if EXPECTED_COMMIT:
-        try:
-            current = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-            if current != EXPECTED_COMMIT:
-                Colors.print_error("⚠️ ALERTA DE SEGURIDAD: Commit inesperado.")
-                sys.exit(1)
-            Colors.print_success("Verificación de integridad exitosa.")
-        except Exception:
-            Colors.print_error("Error verificando commit.")
-            sys.exit(1)
 
 # ============================================
 # 📝 CONFIGURACIÓN DEL ENTORNO
@@ -233,41 +252,56 @@ def main():
     print("   [2] 🌍 REMOTO (Accesible vía Tailscale/VPN)")
 
     mode = input(f"\n👉 {Colors.BOLD}Elige una opción (1/2): {Colors.ENDC}").strip()
-    domain_url = f"localhost:{DEFAULT_PORT}"
+    
+    # 3. CONFIGURACIÓN DE RED
+    Colors.print_step("Configuración de Red")
+    port = get_port()
+    domain_url = f"localhost:{port}"
 
     if mode == "2":
         Colors.print_step("Configuración Remota (Tailscale)")
         if sys.platform.startswith("linux"):
-            if input("¿Instalar Tailscale automáticamente? (s/n): ").lower() == 's':
+            if check_command("tailscale"):
+                Colors.print_info("Tailscale ya está instalado.")
+            elif input("¿Instalar Tailscale automáticamente? (s/n): ").lower() == 's':
                 handle_tailscale_linux()
         elif sys.platform == "win32":
             handle_tailscale_windows()
         
-        print(f"\n{Colors.BLUE}Introduce tu IP de Tailscale o Hostname.{Colors.ENDC}")
-        ip_raw = input(f"👉 IP/Dominio (Enter para '{domain_url}'): ").strip()
+        # Mejora: intentar obtener la IP de Tailscale automáticamente
+        suggested_ip = get_tailscale_ip()
+        prompt_ip = f"👉 IP/Dominio (Enter para '{suggested_ip or 'localhost'}'): "
         
-        if ip_raw:
-            clean = validate_input(ip_raw)
-            if not clean:
-                Colors.print_error("Formato de IP o Hostname inválido por seguridad.")
-                Colors.print_info("Solo se aceptan IPs válidas o nombres de dominio estándar.")
-                sys.exit(1)
-            
-            if ":" not in clean:
-                clean = f"{clean}:{DEFAULT_PORT}"
-            domain_url = clean
+        print(f"\n{Colors.BLUE}Introduce tu IP de Tailscale o Hostname.{Colors.ENDC}")
+        ip_raw = input(prompt_ip).strip()
+        
+        if not ip_raw:
+            ip_raw = suggested_ip or "localhost"
 
-    # 3. VERIFICACIÓN DE PUERTO (Mejora Crítica)
+        clean = validate_input(ip_raw)
+        if not clean:
+            Colors.print_error("Formato de IP o Hostname inválido por seguridad.")
+            Colors.print_info("Solo se aceptan IPs válidas o nombres de dominio estándar.")
+            sys.exit(1)
+        
+        # Añadir puerto si no está presente
+        if ":" not in clean:
+            domain_url = f"{clean}:{port}"
+        else:
+            domain_url = clean
+    
+    # 4. VERIFICACIÓN DE PUERTO
     try:
         target_port = int(domain_url.split(":")[-1])
-        if check_port_availability(target_port):
+        if not check_port_availability(target_port):
             Colors.print_warning(f"El puerto {target_port} ya está en uso.")
             if input("¿Intentar continuar de todos modos? (s/n): ").lower() != 's':
                 sys.exit(1)
-    except:
-        pass # Si falla el parseo del puerto, seguimos bajo riesgo del usuario
+    except (ValueError, IndexError):
+        Colors.print_error(f"No se pudo determinar el puerto desde '{domain_url}'.")
+        sys.exit(1)
 
-    # 4. EJECUCIÓN
+    # 5. EJECUCIÓN
     git_clone_and_verify()
     create_env_file(domain_url)
 
