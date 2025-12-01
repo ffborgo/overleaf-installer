@@ -25,12 +25,7 @@ Antes de ejecutar el script, asegúrate de tener instalado:
 
 ## 🚀 Uso Rápido
 
-1.  Clona este repositorio (o descarga el archivo `install_overleaf.py`):
-
-    ```bash
-    git clone https://github.com/TU_USUARIO/overleaf-installer.git
-    cd overleaf-installer
-    ```
+1.  Descarga el archivo `install_overleaf.py`:
 
 2.  Ejecuta el instalador:
 
@@ -50,7 +45,7 @@ El script automatiza los siguientes pasos manuales y tediosos:
 1.  **Verificación:** Comprueba que Git y Docker estén listos.
 2.  **Clonado:** Descarga el repositorio oficial `overleaf/toolkit`.
 3.  **Configuración:** Crea el archivo `overleaf.env` inyectando claves criptográficas aleatorias (hex 32 bytes) y configurando la URL base.
-4.  **Permisos:** En Linux/macOS, aplica `chmod 600` al archivo de configuración para proteger tus secretos.
+4.  **Permisos:** En Linux/macOS, aplica `chmod 600` al archivo de configuración por seguridad.
 5.  **Despliegue:** Ejecuta `docker compose up -d` para descargar las imágenes (incluyendo el sistema TeX Live completo) y levantar los servicios.
 
 ## ⚠️ Notas Importantes
@@ -68,36 +63,4 @@ El script automatiza los siguientes pasos manuales y tediosos:
 Este proyecto está bajo la Licencia MIT - eres libre de usarlo y modificarlo.
 *Overleaf es una marca registrada de Digital Science UK Limited. Este instalador es un proyecto comunitario no oficial.*
 
------
 
-### 📦 Cómo subir esto a GitHub ahora mismo
-
-Como dijiste que te gusta cómo está, aquí tienes los pasos exactos para subirlo ya:
-
-1.  Crea una carpeta nueva en tu PC (ej: `mi-overleaf-installer`).
-
-2.  Mete adentro el archivo `.py` que te pasé (llámalo `install_overleaf.py`).
-
-3.  Crea el archivo `README.md` y pega el texto de arriba.
-
-4.  (Opcional pero recomendado) Crea un archivo `.gitignore` y escribe adentro:
-
-    ```text
-    __pycache__/
-    overleaf-toolkit/
-    overleaf.env
-    ```
-
-    *(Esto evita que subas por error la carpeta gigante de Overleaf o tus claves secretas a GitHub).*
-
-5.  **Abre la terminal en esa carpeta y ejecuta:**
-
-    ```bash
-    git init
-    git add .
-    git commit -m "Initial commit: Overleaf secure installer script"
-    git branch -M main
-    # Crea un repo vacío en GitHub.com y copia la URL (ej: https://github.com/tusuario/repo.git)
-    git remote add origin https://github.com/TU_USUARIO/TU_REPO.git
-    git push -u origin main
-    ```
