@@ -188,19 +188,45 @@ def git_clone_and_verify():
 # ============================================
 
 def create_env_file(domain_url):
-    if os.path.exists("overleaf.env"):
-        Colors.print_info("El archivo .env ya existe. No se sobrescribirá.")
-        return
+    file_path = "overleaf.env"
+    new_url_line = f"SHARELATEX_URL=http://{domain_url}"
+    
+    # 1. Chequeo Inteligente
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r") as f:
+                content = f.read()
+            
+            # Si la URL ya es exactamente la misma, no molestamos al usuario
+            if new_url_line in content:
+                Colors.print_info(f"La configuración ya está correcta ({domain_url}).")
+                return
 
-    Colors.print_step("Generando secretos criptográficos (.env)")
+            # Si es diferente, mostramos qué cambia
+            Colors.print_info("Se detectó un cambio de configuración.")
+            current_match = re.search(r"SHARELATEX_URL=(.*?)\n", content)
+            if current_match:
+                print(f"   Actual: {current_match.group(1)}")
+            print(f"   Nueva:  http://{domain_url}")
+            
+            print(f"\n{Colors.WARNING}¿Actualizar archivo .env? (Cerrará sesiones activas){Colors.ENDC}")
+            if input("   👉 Escribe 'si' para confirmar: ").lower() != "si":
+                Colors.print_info("Se mantuvo la configuración anterior.")
+                return
+
+        except Exception:
+            pass # Si falla la lectura, procedemos a sobrescribir por seguridad
+
+    # 2. Generación del Archivo (Solo si es nuevo o el usuario confirmó el cambio)
+    Colors.print_step("Generando configuración (.env)")
 
     session_secret = secrets.token_hex(32)
     jwt_secret = secrets.token_hex(32)
 
-    content = f"""# Generado automáticamente
+    content = f"""# Generado automáticamente por install_overleaf.py
 SHARELATEX_CONFIG=config/overleaf.cfg
 SHARELATEX_APP_NAME=Overleaf Community Edition
-SHARELATEX_URL=http://{domain_url}
+{new_url_line}
 SHARELATEX_SESSION_SECRET={session_secret}
 SHARELATEX_JWT_SECRET={jwt_secret}
 MONGO_URL=mongodb://mongo/sharelatex
@@ -208,7 +234,7 @@ REDIS_HOST=redis
 REDIS_PORT=6379
 """
 
-    with open("overleaf.env", "w") as f:
+    with open(file_path, "w") as f:
         f.write(content)
         f.flush()
         
@@ -218,7 +244,7 @@ REDIS_PORT=6379
         else:
             Colors.print_info("Windows detectado: Omitiendo permisos UNIX.")
 
-    Colors.print_success(f"Archivo de configuración creado para: {domain_url}")
+    Colors.print_success(f"Archivo de configuración guardado: {domain_url}")
 
 # ============================================
 # 🚀 MAIN
