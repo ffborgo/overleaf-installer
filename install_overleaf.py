@@ -7,351 +7,429 @@ import re
 import time
 import webbrowser
 import socket
+import threading
+from tkinter import *
+from tkinter import ttk, messagebox, scrolledtext
+from pathlib import Path
 
-# ============================================
-# 🎨 COLORES Y FORMATO
-# ============================================
-class Colors:
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
+# =====================================================
+#  CONFIGURACIÓN GLOBAL
+# =====================================================
 
-    @staticmethod
-    def print_step(msg):
-        print(f"\n{Colors.HEADER}{'='*60}{Colors.ENDC}")
-        print(f"{Colors.BOLD}🚀 {msg}{Colors.ENDC}")
-        print(f"{Colors.HEADER}{'='*60}{Colors.ENDC}")
-
-    @staticmethod
-    def print_success(msg):
-        print(f"{Colors.GREEN}✅ {msg}{Colors.ENDC}")
-
-    @staticmethod
-    def print_error(msg):
-        print(f"{Colors.FAIL}❌ {msg}{Colors.ENDC}")
-
-    @staticmethod
-    def print_info(msg):
-        print(f"{Colors.BLUE}ℹ️  {msg}{Colors.ENDC}")
-
-    @staticmethod
-    def print_warning(msg):
-        print(f"{Colors.WARNING}⚠️  {msg}{Colors.ENDC}")
-
-# ============================================
-# ⚙️ CONFIGURACIÓN
-# ============================================
 REPO_URL = "https://github.com/overleaf/toolkit.git"
 DIR_NAME = "overleaf-toolkit"
 DEFAULT_PORT = 8080
 
-# ============================================
-# 🛠️ FUNCIONES DE UTILIDAD
-# ============================================
+# Regex para validar Hostnames y Direcciones IP
+ipv4_regex = re.compile(
+    r"^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
+    r"(25[0-5]|2[0-4]\d|[01]?\d\d?)$"
+)
 
-def check_command(command):
-    return shutil.which(command) is not None
+hostname_regex = re.compile(
+    r"^(?=.{1,253}$)(?!-)[A-Za-z0-9]"
+    r"([A-Za-z0-9\-]{0,61}[A-Za-z0-9])?"
+    r"(\.(?!-)[A-Za-z0-9]([A-Za-z0-9\-]{0,61}[A-Za-z0-9])?)*$"
+)
+
+
+# =====================================================
+#  UTILIDADES Y HELPERS
+# =====================================================
+
+def log(msg):
+    """Escribe en la caja de texto de la GUI."""
+    output_box.config(state="normal")
+    output_box.insert(END, msg + "\n")
+    output_box.see(END)
+    output_box.config(state="disabled")
+
+
+def check_command(cmd):
+    return shutil.which(cmd) is not None
+
 
 def check_docker_running():
     try:
-        subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        subprocess.run(["docker", "info"],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL,
+                       check=True)
         return True
-    except Exception:
+    except:
         return False
 
-def get_docker_compose_cmd():
+
+def is_port_in_use(port):
+    """Devuelve True si el puerto está ocupado."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def sanitize_host_port(raw):
+    """Valida y limpia la entrada de Host/IP."""
+    if ":" in raw:
+        host, port_str = raw.rsplit(":", 1)
+    else:
+        host, port_str = raw, str(DEFAULT_PORT)
+
+    if not port_str.isdigit():
+        return None
+    port = int(port_str)
+    if not (1 <= port <= 65535):
+        return None
+
+    if ipv4_regex.match(host) or hostname_regex.match(host):
+        return f"{host}:{port}"
+
+    return None
+
+
+def get_compose_cmd():
+    """Detecta si usar 'docker compose' o 'docker-compose'."""
     try:
         subprocess.run(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return ["docker", "compose"]
-    except Exception:
+    except:
         pass
-    
+
     if check_command("docker-compose"):
         return ["docker-compose"]
+
     return None
 
-def validate_input(input_str):
-    """
-    Validación Robusta (Mejora de Seguridad):
-    1. Separa el puerto si existe.
-    2. Verifica si es una IPv4 válida estrictamente.
-    3. O verifica si es un Hostname válido (RFC 1123) para dominios/MagicDNS.
-    """
-    # Separar puerto
-    host_part = input_str
-    if ":" in input_str:
-        host_part, port_part = input_str.split(":", 1)
-        if not port_part.isdigit() or not (1 <= int(port_part) <= 65535):
-            return None
-    
-    # 1. Regex estricta para IPv4
-    ipv4_regex = r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
-    if re.match(ipv4_regex, host_part):
-        return input_str
 
-    # 2. Regex estricta para Hostnames (letras, números, guiones, puntos)
-    # Permite 'mi-pc', 'localhost', 'server.tailscale.net'
-    hostname_regex = r"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])$"
-    if re.match(hostname_regex, host_part):
-        return input_str
-        
-    return None
+# =====================================================
+#  GESTIÓN DE RED Y TAILSCALE
+# =====================================================
 
-def check_port_availability(port):
-    """Verifica si un puerto está disponible."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1)
-        return s.connect_ex(('127.0.0.1', port)) != 0
+def install_tailscale_linux():
+    log("Intentando instalación nativa de Tailscale...")
 
-def get_port():
-    """Solicita al usuario un puerto y lo valida."""
-    while True:
-        port_str = input(f"👉 Introduce el puerto a usar (Enter para {DEFAULT_PORT}): ").strip()
-        if not port_str:
-            return DEFAULT_PORT
-        try:
-            port = int(port_str)
-            if 1 <= port <= 65535:
-                return port
-            else:
-                Colors.print_warning("El puerto debe estar entre 1 y 65535.")
-        except ValueError:
-            Colors.print_warning("Por favor, introduce un número válido.")
+    # Intentar gestores de paquetes comunes
+    if check_command("pacman") and Path("/etc/arch-release").exists():
+        subprocess.run(["sudo", "pacman", "-Sy", "--noconfirm", "tailscale"])
+        return True
 
-def get_tailscale_ip():
-    """Intenta obtener la IP de Tailscale en Linux."""
-    if not sys.platform.startswith("linux"):
-        return ""
-    try:
-        # Ejecuta 'tailscale ip -4' y captura la salida
-        result = subprocess.run(
-            ["tailscale", "ip", "-4"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        # Si el comando falla o no se encuentra, no hace nada
-        return ""
+    if check_command("apt"):
+        subprocess.run(["sudo", "apt", "update"])
+        subprocess.run(["sudo", "apt", "install", "-y", "tailscale"])
+        return True
 
-# ============================================
-# 🌐 GESTIÓN DE TAILSCALE
-# ============================================
+    if check_command("dnf"):
+        subprocess.run(["sudo", "dnf", "install", "-y", "tailscale"])
+        return True
 
-def handle_tailscale_linux():
-    Colors.print_info("Linux detectado. Iniciando instalación segura...")
-    url = "https://tailscale.com/install.sh"
-    local_script = "/tmp/tailscale_install.sh"
+    # Fallback manual
+    messagebox.showinfo("Instalación Manual",
+                        "No se detectó un gestor compatible automático.\n"
+                        "Se abrirá la web para instalar Tailscale manualmente.")
+    webbrowser.open("https://tailscale.com/download/linux")
+    return False
 
-    try:
-        subprocess.run(["curl", "-fsSL", "-o", local_script, url], check=True)
-        os.chmod(local_script, 0o700)
-        subprocess.run([local_script], check=True)
-        
-        Colors.print_success("Tailscale instalado.")
-        Colors.print_warning("ACCIÓN REQUERIDA: Ejecuta 'sudo tailscale up' en otra terminal.")
-        input(f"{Colors.BOLD}Presiona ENTER cuando estés conectado y tengas tu IP...{Colors.ENDC}")
-    except subprocess.CalledProcessError:
-        Colors.print_error("Falló la instalación automática.")
 
-def handle_tailscale_windows():
-    Colors.print_info("Windows detectado.")
-    print("\n👉 Abriendo página de descarga...")
-    time.sleep(1)
-    webbrowser.open("https://tailscale.com/download/windows")
-    input(f"\n{Colors.BOLD}Presiona ENTER cuando tengas Tailscale listo y conectado...{Colors.ENDC}")
+# =====================================================
+#  GESTIÓN DE ARCHIVOS Y CONFIGURACIÓN
+# =====================================================
 
-# ============================================
-# 📦 CLONADO Y SEGURIDAD
-# ============================================
-
-def git_clone_and_verify():
+def git_clone():
     if not os.path.exists(DIR_NAME):
-        Colors.print_step("Clonando Overleaf Toolkit...")
-        try:
-            subprocess.run(["git", "clone", REPO_URL, DIR_NAME], check=True)
-        except subprocess.CalledProcessError:
-            Colors.print_error("No se pudo clonar el repositorio. Revisa tu internet.")
-            sys.exit(1)
+        log("Clonando repositorio Overleaf Toolkit...")
+        subprocess.run(["git", "clone", REPO_URL, DIR_NAME], check=True)
     else:
-        Colors.print_info(f"La carpeta '{DIR_NAME}' ya existe. Usando versión actual.")
+        log("Directorio del proyecto encontrado. Usando versión existente.")
 
     os.chdir(DIR_NAME)
 
-# ============================================
-# 📝 CONFIGURACIÓN DEL ENTORNO
-# ============================================
 
-def create_env_file(domain_url):
-    file_path = "overleaf.env"
-    new_url_line = f"SHARELATEX_URL=http://{domain_url}"
+def create_env(domain, port):
+    """Genera overleaf.env y docker-compose.yml con la configuración v5.0."""
     
-    # 1. Chequeo Inteligente
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, "r") as f:
-                content = f.read()
-            
-            # Si la URL ya es exactamente la misma, no molestamos al usuario
-            if new_url_line in content:
-                Colors.print_info(f"La configuración ya está correcta ({domain_url}).")
-                return
+    # 1. Archivo de Variables (.env)
+    if os.path.exists("overleaf.env"):
+        log("Archivo .env existente. No se sobrescribirá (mantiene tus datos).")
+    else:
+        session = secrets.token_hex(32)
+        jwt = secrets.token_hex(32)
 
-            # Si es diferente, mostramos qué cambia
-            Colors.print_info("Se detectó un cambio de configuración.")
-            current_match = re.search(r"SHARELATEX_URL=(.*?)\n", content)
-            if current_match:
-                print(f"   Actual: {current_match.group(1)}")
-            print(f"   Nueva:  http://{domain_url}")
-            
-            print(f"\n{Colors.WARNING}¿Actualizar archivo .env? (Cerrará sesiones activas){Colors.ENDC}")
-            if input("   👉 Escribe 'si' para confirmar: ").lower() != "si":
-                Colors.print_info("Se mantuvo la configuración anterior.")
-                return
-
-        except Exception:
-            pass # Si falla la lectura, procedemos a sobrescribir por seguridad
-
-    # 2. Generación del Archivo (Solo si es nuevo o el usuario confirmó el cambio)
-    Colors.print_step("Generando configuración (.env)")
-
-    session_secret = secrets.token_hex(32)
-    jwt_secret = secrets.token_hex(32)
-
-    content = f"""# Generado automáticamente por install_overleaf.py
-SHARELATEX_CONFIG=config/overleaf.cfg
-SHARELATEX_APP_NAME=Overleaf Community Edition
-{new_url_line}
-SHARELATEX_SESSION_SECRET={session_secret}
-SHARELATEX_JWT_SECRET={jwt_secret}
-MONGO_URL=mongodb://mongo/sharelatex
+        # Variables actualizadas para Overleaf 5.0 (Prefijo OVERLEAF_)
+        data = f"""# Generado por Overleaf Installer
+OVERLEAF_APP_NAME=Overleaf Community
+OVERLEAF_SITE_URL=http://{domain}
+OVERLEAF_SESSION_SECRET={session}
+OVERLEAF_JWT_SECRET={jwt}
+OVERLEAF_MONGO_URL=mongodb://mongo/sharelatex
+OVERLEAF_REDIS_HOST=redis
 REDIS_HOST=redis
 REDIS_PORT=6379
+OVERLEAF_PORT={port}
 """
+        with open("overleaf.env", "w") as f:
+            f.write(data)
+            # Permisos seguros solo en Linux/Mac
+            if hasattr(os, "fchmod"):
+                os.fchmod(f.fileno(), 0o600)
+        log("Archivo .env creado con éxito.")
 
-    with open(file_path, "w") as f:
-        f.write(content)
-        f.flush()
-        
-        if hasattr(os, 'fchmod'):
-            os.fchmod(f.fileno(), 0o600)
-            Colors.print_success("Permisos seguros (0600) aplicados.")
-        else:
-            Colors.print_info("Windows detectado: Omitiendo permisos UNIX.")
+    # 2. Archivo Docker Compose (Infraestructura)
+    # Configuración para Mongo 8.0, Redis 7.0 y Rutas Nuevas
+    compose_content = f"""services:
+  sharelatex:
+    image: sharelatex/sharelatex:latest
+    container_name: sharelatex
+    restart: unless-stopped
+    depends_on:
+      - mongo
+      - redis
+    ports:
+      - "{port}:80"
+    links:
+      - mongo
+      - redis
+    volumes:
+      - ./data/sharelatex:/var/lib/overleaf
+      - ./data/logs:/var/log/overleaf
+    environment:
+      OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
+      OVERLEAF_REDIS_HOST: redis
+      REDIS_HOST: redis
+    env_file:
+      - overleaf.env
 
-    Colors.print_success(f"Archivo de configuración guardado: {domain_url}")
+  mongo:
+    image: mongo:8.0
+    container_name: mongo
+    restart: unless-stopped
+    command: "--replSet overleaf" 
+    volumes:
+      - ./data/mongo:/data/db
 
-# ============================================
-# 🚀 MAIN
-# ============================================
-
-def main():
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print(f"{Colors.HEADER}{Colors.BOLD}   INSTALADOR DE OVERLEAF SERVER (Versión Segura){Colors.ENDC}")
-
-    # 1. VERIFICACIONES
-    if not check_command("git"):
-        Colors.print_error("Git no está instalado.")
-        sys.exit(1)
-
-    compose_cmd = get_docker_compose_cmd()
-    if not compose_cmd:
-        Colors.print_error("No se encontró 'docker-compose'.")
-        sys.exit(1)
-
-    if not check_docker_running():
-        Colors.print_error("Docker no está corriendo.")
-        if sys.platform == "win32":
-            Colors.print_info("👉 Abre Docker Desktop.")
-        else:
-            Colors.print_info("👉 Ejecuta: sudo systemctl start docker")
-        sys.exit(1)
-
-    # 2. MODO
-    Colors.print_step("Modo de Instalación")
-    print("   [1] 🏠 LOCAL (Solo accesible desde mi red/PC)")
-    print("   [2] 🌍 REMOTO (Accesible vía Tailscale/VPN)")
-
-    mode = input(f"\n👉 {Colors.BOLD}Elige una opción (1/2): {Colors.ENDC}").strip()
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: unless-stopped
+    volumes:
+      - ./data/redis:/data
+"""
     
-    # 3. CONFIGURACIÓN DE RED
-    Colors.print_step("Configuración de Red")
-    port = get_port()
-    domain_url = f"localhost:{port}"
+    with open("docker-compose.yml", "w") as f:
+        f.write(compose_content)
+    log("Configuración de Docker (compose) actualizada.")
 
-    if mode == "2":
-        Colors.print_step("Configuración Remota (Tailscale)")
-        if sys.platform.startswith("linux"):
-            if check_command("tailscale"):
-                Colors.print_info("Tailscale ya está instalado.")
-            elif input("¿Instalar Tailscale automáticamente? (s/n): ").lower() == 's':
-                handle_tailscale_linux()
-        elif sys.platform == "win32":
-            handle_tailscale_windows()
-        
-        # Mejora: intentar obtener la IP de Tailscale automáticamente
-        suggested_ip = get_tailscale_ip()
-        prompt_ip = f"👉 IP/Dominio (Enter para '{suggested_ip or 'localhost'}'): "
-        
-        print(f"\n{Colors.BLUE}Introduce tu IP de Tailscale o Hostname.{Colors.ENDC}")
-        ip_raw = input(prompt_ip).strip()
-        
-        if not ip_raw:
-            ip_raw = suggested_ip or "localhost"
 
-        clean = validate_input(ip_raw)
-        if not clean:
-            Colors.print_error("Formato de IP o Hostname inválido por seguridad.")
-            Colors.print_info("Solo se aceptan IPs válidas o nombres de dominio estándar.")
-            sys.exit(1)
-        
-        # Añadir puerto si no está presente
-        if ":" not in clean:
-            domain_url = f"{clean}:{port}"
-        else:
-            domain_url = clean
+def init_mongo_replica():
+    """Inicializa el Replica Set requerido por Mongo 8.0."""
+    log("Inicializando base de datos (Mongo Replica Set)...")
+    log("Esperando 10 segundos para asegurar arranque...")
+    time.sleep(10) 
     
-    # 4. VERIFICACIÓN DE PUERTO
     try:
-        target_port = int(domain_url.split(":")[-1])
-        if not check_port_availability(target_port):
-            Colors.print_warning(f"El puerto {target_port} ya está en uso.")
-            if input("¿Intentar continuar de todos modos? (s/n): ").lower() != 's':
-                sys.exit(1)
-    except (ValueError, IndexError):
-        Colors.print_error(f"No se pudo determinar el puerto desde '{domain_url}'.")
-        sys.exit(1)
-
-    # 5. EJECUCIÓN
-    git_clone_and_verify()
-    create_env_file(domain_url)
-
-    Colors.print_step("Lanzando Docker Containers")
-    Colors.print_info("Descargando imágenes (TeX Live es pesado)...")
-
-    try:
-        subprocess.run(compose_cmd + ["up", "-d"], check=True)
+        cmd = ["docker", "exec", "mongo", "mongosh", "--eval", "rs.initiate()"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
         
-        Colors.print_step("¡INSTALACIÓN COMPLETADA!")
-        final_url = f"http://{domain_url}"
-        print(f"🌍 Accede aquí: {Colors.BOLD}{Colors.GREEN}{final_url}{Colors.ENDC}")
-        print(f"📂 Carpeta: {os.path.abspath('.')}")
-        print(f"🛑 Para detener: '{' '.join(compose_cmd)} down'")
-        
-        time.sleep(2)
-        webbrowser.open(final_url)
+        if "ok" in result.stdout or "already initialized" in result.stdout:
+            log("✅ Base de datos inicializada correctamente.")
+        else:
+            log(f"⚠️ Alerta Mongo: {result.stdout}")
+            
+    except Exception as e:
+        log(f"No se pudo inicializar Mongo (¿Quizás ya estaba listo?): {e}")
 
-    except subprocess.CalledProcessError:
-        Colors.print_error("Error al ejecutar Docker Compose.")
 
-if __name__ == "__main__":
+# =====================================================
+#  FUNCIONES DE CONTROL (THREADS)
+# =====================================================
+
+def start_install_thread():
+    t = threading.Thread(target=run_install)
+    t.daemon = True
+    t.start()
+
+def stop_server_thread():
+    t = threading.Thread(target=stop_server)
+    t.daemon = True
+    t.start()
+
+def start_server_thread():
+    t = threading.Thread(target=only_start_server)
+    t.daemon = True
+    t.start()
+
+# --- Lógica de Control ---
+
+def stop_server():
+    compose = get_compose_cmd()
+    if not compose:
+        messagebox.showerror("Error", "No se encontró docker-compose.")
+        return
+    
+    if os.path.exists(DIR_NAME):
+        os.chdir(DIR_NAME)
+        log("🛑 Deteniendo servidor...")
+        subprocess.run(compose + ["stop"], check=True)
+        log("✅ Servidor DETENIDO. (Recursos liberados)")
+    else:
+        log("❌ No se encontró la carpeta de instalación.")
+
+def only_start_server():
+    compose = get_compose_cmd()
+    if not compose:
+        messagebox.showerror("Error", "No se encontró docker-compose.")
+        return
+    
+    if os.path.exists(DIR_NAME):
+        os.chdir(DIR_NAME)
+        log("▶️ Iniciando servidor...")
+        subprocess.run(compose + ["start"], check=True)
+        log("✅ Servidor INICIADO en segundo plano.")
+        messagebox.showinfo("Servidor", "El servidor se ha iniciado.")
+    else:
+        log("❌ Primero debes instalar Overleaf.")
+
+def run_install():
     try:
-        main()
-    except KeyboardInterrupt:
-        print(f"\n\n{Colors.WARNING}Cancelado por el usuario.{Colors.ENDC}")
-        sys.exit(0)
+        # 1. Validaciones Iniciales
+        mode = mode_var.get()
+        host = host_entry.get().strip()
+        domain = f"localhost:{DEFAULT_PORT}"
+
+        if not check_command("git"):
+            messagebox.showerror("Error", "Git no está instalado.")
+            return
+
+        compose = get_compose_cmd()
+        if not compose:
+            messagebox.showerror("Error", "No se encontró docker-compose.")
+            return
+
+        if not check_docker_running():
+            messagebox.showerror("Error", "Docker no responde. Verifica que esté corriendo y tengas permisos.")
+            return
+
+        # 2. Configuración de Red (Tailscale / Local)
+        if mode == 2: # Remoto
+            log("Modo Remoto seleccionado.")
+            if sys.platform.startswith("linux"):
+                if tailscale_var.get():
+                    if not check_command("tailscale"):
+                        install_tailscale_linux()
+                        messagebox.showinfo("Atención", 
+                                            "Se instaló Tailscale. Ejecuta 'sudo tailscale up' en una terminal aparte para loguearte.\n\nDale OK cuando estés listo.")
+                    else:
+                        log("Tailscale ya está instalado.")
+                        
+            elif sys.platform == "win32":
+                webbrowser.open("https://tailscale.com/download/windows")
+                messagebox.showinfo("Tailscale", "Instálalo, conéctate y luego presiona OK.")
+
+            if host:
+                clean = sanitize_host_port(host)
+                if not clean:
+                    messagebox.showerror("Error", "IP o Dominio inválido.")
+                    return
+                domain = clean
+
+        # 3. Validación de Puerto
+        try:
+            port = int(domain.split(":")[1])
+        except IndexError:
+            port = DEFAULT_PORT
+
+        if is_port_in_use(port):
+            log(f"⚠️ El puerto {port} parece ocupado. Si es una reinstalación, ignora esto.")
+            if not messagebox.askyesno("Puerto en uso", f"El puerto {port} está ocupado.\n¿Continuar de todos modos?"):
+                return
+
+        # 4. Proceso de Instalación
+        log("📥 Iniciando descarga y configuración...")
+        git_clone()
+        create_env(domain, port)
+
+        log(f"🐳 Levantando contenedores en puerto {port}...")
+        log("⏳ Descargando ~1.5 GB de imágenes (TeX Live). Paciencia...")
+        
+        # Reset para asegurar configuración limpia
+        subprocess.run(compose + ["down"], check=True)
+        subprocess.run(compose + ["up", "-d"], check=True)
+        
+        # Inicializar DB
+        init_mongo_replica()
+
+        url = f"http://{domain}"
+        log(f"\n✅ ¡INSTALACIÓN COMPLETADA EXITOSAMENTE!")
+        log(f"🔗 Acceso: {url}")
+        log(f"ℹ️  El servidor se iniciará automáticamente con la PC (si no lo detienes manualmnete).")
+        
+        messagebox.showwarning("Finalizado", 
+                            "El servidor está arrancando.\n\n"
+                            "⚠️ IMPORTANTE: Puede tardar 2-3 minutos en estar listo la primera vez.\n"
+                            "Si ves un error de conexión, espera un poco y recarga la página.")
+        
+        webbrowser.open(url)
+        
+    except Exception as e:
+        messagebox.showerror("Error Crítico", f"Ocurrió un error:\n{str(e)}")
+        log(f"❌ ERROR: {str(e)}")
+
+
+# =====================================================
+#  INTERFAZ GRÁFICA (GUI)
+# =====================================================
+
+root = Tk()
+root.title("Instalador Overleaf – Community Edition")
+root.geometry("750x650")
+
+# Estilo
+style = ttk.Style()
+style.configure("TButton", font=("Helvetica", 10))
+style.configure("TLabel", font=("Helvetica", 11))
+
+frame = ttk.Frame(root, padding=20)
+frame.pack(fill="both", expand=True)
+
+# Encabezado
+ttk.Label(frame, text="Configuración de Instalación", font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 10))
+
+# Selección de modo
+mode_frame = ttk.LabelFrame(frame, text="1. Elige el modo de uso", padding=10)
+mode_frame.pack(fill="x", pady=5)
+
+mode_var = IntVar(value=1)
+ttk.Radiobutton(mode_frame, text="🏠 Local (Solo mi PC / Wi-Fi)", variable=mode_var, value=1).pack(anchor="w")
+ttk.Radiobutton(mode_frame, text="🌍 Remoto (Compartir vía Tailscale)", variable=mode_var, value=2).pack(anchor="w")
+
+tailscale_var = IntVar(value=1)
+ttk.Checkbutton(mode_frame, text="Instalar Tailscale automáticamente (Solo Linux)", variable=tailscale_var).pack(anchor="w", padx=20)
+
+# Host/IP
+host_frame = ttk.LabelFrame(frame, text="2. Dirección IP (Solo para modo Remoto)", padding=10)
+host_frame.pack(fill="x", pady=10)
+
+host_entry = ttk.Entry(host_frame)
+host_entry.pack(fill="x", pady=5)
+ttk.Label(host_frame, text="Ej: 100.85.x.x  (Dejar vacío para localhost:8080 en modo Local)", font=("Helvetica", 9, "italic")).pack(anchor="w")
+
+# Botones de Acción
+action_frame = ttk.Frame(frame)
+action_frame.pack(fill="x", pady=20)
+
+btn_install = ttk.Button(action_frame, text="INSTALAR / REPARAR", command=start_install_thread)
+btn_install.pack(fill="x", ipady=5)
+
+# Panel de Control
+control_frame = ttk.LabelFrame(frame, text="Panel de Control (Post-Instalación)", padding=10)
+control_frame.pack(fill="x", pady=10)
+
+btn_start = ttk.Button(control_frame, text="Iniciar", command=start_server_thread)
+btn_start.pack(side="left", expand=True, fill="x", padx=5)
+
+btn_stop = ttk.Button(control_frame, text="Detener (Ahorrar RAM)", command=stop_server_thread)
+btn_stop.pack(side="right", expand=True, fill="x", padx=5)
+
+# Log
+ttk.Label(frame, text="Registro de operaciones:", font=("Helvetica", 10, "bold")).pack(anchor="w")
+output_box = scrolledtext.ScrolledText(frame, height=12, state="disabled", font=("Consolas", 9))
+output_box.pack(fill="both", expand=True)
+
+root.mainloop()
