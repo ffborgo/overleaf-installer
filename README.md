@@ -8,6 +8,10 @@ An automated, secure, and **GUI-based** installer to deploy your own **Overleaf 
 
 This script handles Docker configuration, cryptographic secret generation, and remote connectivity (via Tailscale), allowing you to have your own real-time collaborative LaTeX editor without user limits and fully under your control.
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="Overleaf Installer GUI Screenshot" width="600">
+</p>
+
 ## ✨ Features
 
 * **🚀 Multi-platform:** Works on **Arch Linux**, **Debian/Ubuntu**, **Windows**, and **macOS**.
@@ -29,11 +33,7 @@ Before running the script, ensure you have:
 
 ## 🚀 Quick Start
 
-1.  Clone the repository:
-    ```bash
-    git clone [https://github.com/ffborgo/overleaf-installer.git](https://github.com/ffborgo/overleaf-installer.git)
-    cd overleaf-installer
-    ```
+1.  Download the script "install_overleaf.py"
 
 2.  Run the installer:
     ```bash
