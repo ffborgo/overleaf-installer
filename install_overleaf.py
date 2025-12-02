@@ -144,7 +144,7 @@ def get_tailscale_ip():
 # ============================================
 
 def handle_tailscale_linux():
-    Colors.print_info("Detectado Linux. Iniciando instalación segura...")
+    Colors.print_info("Linux detectado. Iniciando instalación segura...")
     url = "https://tailscale.com/install.sh"
     local_script = "/tmp/tailscale_install.sh"
 
@@ -160,7 +160,7 @@ def handle_tailscale_linux():
         Colors.print_error("Falló la instalación automática.")
 
 def handle_tailscale_windows():
-    Colors.print_info("Detectado Windows.")
+    Colors.print_info("Windows detectado.")
     print("\n👉 Abriendo página de descarga...")
     time.sleep(1)
     webbrowser.open("https://tailscale.com/download/windows")
