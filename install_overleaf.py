@@ -17,7 +17,10 @@ from pathlib import Path
 # =====================================================
 
 REPO_URL = "https://github.com/overleaf/toolkit.git"
-DIR_NAME = "overleaf-toolkit"
+
+# INSTALACIÓN EN CARPETA DE USUARIO (Ej: /home/juan/overleaf-server)
+# Esto mantiene limpio el directorio donde descargaste el script.
+INSTALL_DIR = Path.home() / "overleaf-server"
 DEFAULT_PORT = 8080
 
 # Regex para validar Hostnames y Direcciones IP
@@ -32,6 +35,81 @@ hostname_regex = re.compile(
     r"(\.(?!-)[A-Za-z0-9]([A-Za-z0-9\-]{0,61}[A-Za-z0-9])?)*$"
 )
 
+# =====================================================
+#  TRADUCCIONES / TRANSLATIONS (SIN EMOJIS)
+# =====================================================
+
+LANG = "en" 
+
+TEXTS = {
+    "es": {
+        "title": "Instalador Overleaf - Community Edition",
+        "mode_label": "Modo de instalación:",
+        "mode_local": "[LOCAL] Solo mi PC / Wi-Fi",
+        "mode_remote": "[REMOTO] Compartir vía Tailscale",
+        "tailscale_check": "Instalar Tailscale automáticamente (Solo Linux)",
+        "host_label": "Dirección IP (Solo para modo Remoto):",
+        "host_placeholder": "Ej: 100.85.x.x (Dejar vacío para localhost en Local)",
+        "btn_install": ">>> INSTALAR / REPARAR",
+        "control_panel": "Panel de Control",
+        "btn_start": "Iniciar Servidor",
+        "btn_stop": "Detener Servidor",
+        "log_label": "Registro de operaciones:",
+        "err_git": "Git no está instalado.",
+        "err_docker_compose": "No se encontró docker-compose.",
+        "err_docker_run": "Docker no responde. Verifica permisos.",
+        "msg_tailscale_linux": "Se instaló Tailscale. Ejecuta 'sudo tailscale up' en una terminal aparte.\nLuego dale OK.",
+        "msg_tailscale_win": "Instálalo, conéctate y luego presiona OK.",
+        "err_ip": "IP o Dominio inválido.",
+        "warn_port": "El puerto {} parece ocupado.\n¿Continuar de todos modos?",
+        "log_init": "Iniciando configuración...",
+        "log_dl": "... Descargando ~1.5 GB (TeX Live). Paciencia ...",
+        "log_success": "\n[OK] INSTALACION COMPLETADA",
+        "log_access": "URL Acceso:",
+        "log_auto": "[INFO] El servidor iniciará con la PC.",
+        "msg_final_title": "Finalizado",
+        "msg_final_body": "El servidor está arrancando.\nPuede tardar 2-3 minutos la primera vez.",
+        "server_stop": "[OK] Servidor DETENIDO.",
+        "server_start": "[OK] Servidor INICIADO.",
+        "not_installed": "[ERROR] Carpeta no encontrada. Instala primero.",
+        "select_lang": "Select Language / Seleccione Idioma"
+    },
+    "en": {
+        "title": "Overleaf Installer - Community Edition",
+        "mode_label": "Installation Mode:",
+        "mode_local": "[LOCAL] Only my PC / Wi-Fi",
+        "mode_remote": "[REMOTE] Share via Tailscale",
+        "tailscale_check": "Auto-install Tailscale (Linux only)",
+        "host_label": "IP Address (Remote mode only):",
+        "host_placeholder": "Ex: 100.85.x.x (Leave empty for localhost)",
+        "btn_install": ">>> INSTALL / REPAIR",
+        "control_panel": "Control Panel",
+        "btn_start": "Start Server",
+        "btn_stop": "Stop Server",
+        "log_label": "Operation Log:",
+        "err_git": "Git is not installed.",
+        "err_docker_compose": "docker-compose not found.",
+        "err_docker_run": "Docker is not responding. Check permissions.",
+        "msg_tailscale_linux": "Tailscale installed. Run 'sudo tailscale up' externally.\nClick OK when ready.",
+        "msg_tailscale_win": "Install it, connect, and then press OK.",
+        "err_ip": "Invalid IP or Domain.",
+        "warn_port": "Port {} seems busy.\nContinue anyway?",
+        "log_init": "Starting configuration...",
+        "log_dl": "... Downloading ~1.5 GB (TeX Live). Please wait ...",
+        "log_success": "\n[OK] INSTALLATION COMPLETED",
+        "log_access": "Access URL:",
+        "log_auto": "[INFO] Server will auto-start with PC.",
+        "msg_final_title": "Finished",
+        "msg_final_body": "Server is starting up.\nIt may take 2-3 minutes to be ready.",
+        "server_stop": "[OK] Server STOPPED.",
+        "server_start": "[OK] Server STARTED.",
+        "not_installed": "[ERROR] Folder not found. Install first.",
+        "select_lang": "Select Language / Seleccione Idioma"
+    }
+}
+
+def t(key):
+    return TEXTS[LANG].get(key, key)
 
 # =====================================================
 #  UTILIDADES Y HELPERS
@@ -104,7 +182,7 @@ def get_compose_cmd():
 # =====================================================
 
 def install_tailscale_linux():
-    log("Intentando instalación nativa de Tailscale...")
+    log("Tailscale native install...")
 
     # Intentar gestores de paquetes comunes
     if check_command("pacman") and Path("/etc/arch-release").exists():
@@ -121,9 +199,8 @@ def install_tailscale_linux():
         return True
 
     # Fallback manual
-    messagebox.showinfo("Instalación Manual",
-                        "No se detectó un gestor compatible automático.\n"
-                        "Se abrirá la web para instalar Tailscale manualmente.")
+    messagebox.showinfo("Manual Install",
+                        "No package manager found.\nOpening browser for manual install.")
     webbrowser.open("https://tailscale.com/download/linux")
     return False
 
@@ -133,13 +210,14 @@ def install_tailscale_linux():
 # =====================================================
 
 def git_clone():
-    if not os.path.exists(DIR_NAME):
-        log("Clonando repositorio Overleaf Toolkit...")
-        subprocess.run(["git", "clone", REPO_URL, DIR_NAME], check=True)
+    # Usamos INSTALL_DIR (ruta absoluta) en lugar de relativa
+    if not INSTALL_DIR.exists():
+        log(f"Cloning repo to {INSTALL_DIR}...")
+        subprocess.run(["git", "clone", REPO_URL, str(INSTALL_DIR)], check=True)
     else:
-        log("Directorio del proyecto encontrado. Usando versión existente.")
+        log("Folder found. Using existing version.")
 
-    os.chdir(DIR_NAME)
+    os.chdir(INSTALL_DIR)
 
 
 def create_env(domain, port):
@@ -147,12 +225,11 @@ def create_env(domain, port):
     
     # 1. Archivo de Variables (.env)
     if os.path.exists("overleaf.env"):
-        log("Archivo .env existente. No se sobrescribirá (mantiene tus datos).")
+        log(".env exists. Keeping config.")
     else:
         session = secrets.token_hex(32)
         jwt = secrets.token_hex(32)
 
-        # Variables actualizadas para Overleaf 5.0 (Prefijo OVERLEAF_)
         data = f"""# Generado por Overleaf Installer
 OVERLEAF_APP_NAME=Overleaf Community
 OVERLEAF_SITE_URL=http://{domain}
@@ -169,10 +246,9 @@ OVERLEAF_PORT={port}
             # Permisos seguros solo en Linux/Mac
             if hasattr(os, "fchmod"):
                 os.fchmod(f.fileno(), 0o600)
-        log("Archivo .env creado con éxito.")
+        log(".env created.")
 
     # 2. Archivo Docker Compose (Infraestructura)
-    # Configuración para Mongo 8.0, Redis 7.0 y Rutas Nuevas
     compose_content = f"""services:
   sharelatex:
     image: sharelatex/sharelatex:latest
@@ -214,13 +290,12 @@ OVERLEAF_PORT={port}
     
     with open("docker-compose.yml", "w") as f:
         f.write(compose_content)
-    log("Configuración de Docker (compose) actualizada.")
+    log("docker-compose.yml updated.")
 
 
 def init_mongo_replica():
     """Inicializa el Replica Set requerido por Mongo 8.0."""
-    log("Inicializando base de datos (Mongo Replica Set)...")
-    log("Esperando 10 segundos para asegurar arranque...")
+    log("Init Mongo (Wait 10s)...")
     time.sleep(10) 
     
     try:
@@ -228,12 +303,12 @@ def init_mongo_replica():
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if "ok" in result.stdout or "already initialized" in result.stdout:
-            log("✅ Base de datos inicializada correctamente.")
+            log("[OK] Mongo Replica Set Ready.")
         else:
-            log(f"⚠️ Alerta Mongo: {result.stdout}")
+            log(f"[!] Mongo Warning: {result.stdout}")
             
     except Exception as e:
-        log(f"No se pudo inicializar Mongo (¿Quizás ya estaba listo?): {e}")
+        log(f"Mongo Init Error: {e}")
 
 
 # =====================================================
@@ -260,31 +335,31 @@ def start_server_thread():
 def stop_server():
     compose = get_compose_cmd()
     if not compose:
-        messagebox.showerror("Error", "No se encontró docker-compose.")
+        messagebox.showerror("Error", t("err_docker_compose"))
         return
     
-    if os.path.exists(DIR_NAME):
-        os.chdir(DIR_NAME)
-        log("🛑 Deteniendo servidor...")
+    if INSTALL_DIR.exists():
+        os.chdir(INSTALL_DIR)
+        log("Stopping...")
         subprocess.run(compose + ["stop"], check=True)
-        log("✅ Servidor DETENIDO. (Recursos liberados)")
+        log(t("server_stop"))
     else:
-        log("❌ No se encontró la carpeta de instalación.")
+        log(t("not_installed"))
 
 def only_start_server():
     compose = get_compose_cmd()
     if not compose:
-        messagebox.showerror("Error", "No se encontró docker-compose.")
+        messagebox.showerror("Error", t("err_docker_compose"))
         return
     
-    if os.path.exists(DIR_NAME):
-        os.chdir(DIR_NAME)
-        log("▶️ Iniciando servidor...")
+    if INSTALL_DIR.exists():
+        os.chdir(INSTALL_DIR)
+        log("Starting...")
         subprocess.run(compose + ["start"], check=True)
-        log("✅ Servidor INICIADO en segundo plano.")
-        messagebox.showinfo("Servidor", "El servidor se ha iniciado.")
+        log(t("server_start"))
+        messagebox.showinfo("Server", t("server_start"))
     else:
-        log("❌ Primero debes instalar Overleaf.")
+        log(t("not_installed"))
 
 def run_install():
     try:
@@ -294,38 +369,37 @@ def run_install():
         domain = f"localhost:{DEFAULT_PORT}"
 
         if not check_command("git"):
-            messagebox.showerror("Error", "Git no está instalado.")
+            messagebox.showerror("Error", t("err_git"))
             return
 
         compose = get_compose_cmd()
         if not compose:
-            messagebox.showerror("Error", "No se encontró docker-compose.")
+            messagebox.showerror("Error", t("err_docker_compose"))
             return
 
         if not check_docker_running():
-            messagebox.showerror("Error", "Docker no responde. Verifica que esté corriendo y tengas permisos.")
+            messagebox.showerror("Error", t("err_docker_run"))
             return
 
         # 2. Configuración de Red (Tailscale / Local)
         if mode == 2: # Remoto
-            log("Modo Remoto seleccionado.")
+            log("Remote Mode selected.")
             if sys.platform.startswith("linux"):
                 if tailscale_var.get():
                     if not check_command("tailscale"):
                         install_tailscale_linux()
-                        messagebox.showinfo("Atención", 
-                                            "Se instaló Tailscale. Ejecuta 'sudo tailscale up' en una terminal aparte para loguearte.\n\nDale OK cuando estés listo.")
+                        messagebox.showinfo("Action Required", t("msg_tailscale_linux"))
                     else:
-                        log("Tailscale ya está instalado.")
+                        log("Tailscale installed.")
                         
             elif sys.platform == "win32":
                 webbrowser.open("https://tailscale.com/download/windows")
-                messagebox.showinfo("Tailscale", "Instálalo, conéctate y luego presiona OK.")
+                messagebox.showinfo("Tailscale", t("msg_tailscale_win"))
 
             if host:
                 clean = sanitize_host_port(host)
                 if not clean:
-                    messagebox.showerror("Error", "IP o Dominio inválido.")
+                    messagebox.showerror("Error", t("err_ip"))
                     return
                 domain = clean
 
@@ -336,100 +410,121 @@ def run_install():
             port = DEFAULT_PORT
 
         if is_port_in_use(port):
-            log(f"⚠️ El puerto {port} parece ocupado. Si es una reinstalación, ignora esto.")
-            if not messagebox.askyesno("Puerto en uso", f"El puerto {port} está ocupado.\n¿Continuar de todos modos?"):
+            log(f"[!] Port {port} busy.")
+            if not messagebox.askyesno("Port Busy", t("warn_port").format(port)):
                 return
 
         # 4. Proceso de Instalación
-        log("📥 Iniciando descarga y configuración...")
+        log(t("log_init"))
+        
+        # Clonamos en la nueva ubicación (HOME/overleaf-server)
         git_clone()
+        
         create_env(domain, port)
 
-        log(f"🐳 Levantando contenedores en puerto {port}...")
-        log("⏳ Descargando ~1.5 GB de imágenes (TeX Live). Paciencia...")
+        log(f"Docker Up ({port})...")
+        log(t("log_dl"))
         
-        # Reset para asegurar configuración limpia
         subprocess.run(compose + ["down"], check=True)
         subprocess.run(compose + ["up", "-d"], check=True)
         
-        # Inicializar DB
         init_mongo_replica()
 
         url = f"http://{domain}"
-        log(f"\n✅ ¡INSTALACIÓN COMPLETADA EXITOSAMENTE!")
-        log(f"🔗 Acceso: {url}")
-        log(f"ℹ️  El servidor se iniciará automáticamente con la PC (si no lo detienes manualmnete).")
+        log(t("log_success"))
+        log(f"{t('log_access')} {url}")
+        log(t("log_auto"))
         
-        messagebox.showwarning("Finalizado", 
-                            "El servidor está arrancando.\n\n"
-                            "⚠️ IMPORTANTE: Puede tardar 2-3 minutos en estar listo la primera vez.\n"
-                            "Si ves un error de conexión, espera un poco y recarga la página.")
+        messagebox.showwarning(t("msg_final_title"), t("msg_final_body"))
         
         webbrowser.open(url)
         
     except Exception as e:
-        messagebox.showerror("Error Crítico", f"Ocurrió un error:\n{str(e)}")
-        log(f"❌ ERROR: {str(e)}")
+        messagebox.showerror("Critical Error", f"{str(e)}")
+        log(f"[ERROR] {str(e)}")
 
 
 # =====================================================
-#  INTERFAZ GRÁFICA (GUI)
+#  LÓGICA DE SELECCIÓN DE IDIOMA
 # =====================================================
 
-root = Tk()
-root.title("Instalador Overleaf – Community Edition")
-root.geometry("750x650")
+def set_lang(language):
+    global LANG
+    LANG = language
+    lang_window.destroy()
+    launch_main_gui()
 
-# Estilo
-style = ttk.Style()
-style.configure("TButton", font=("Helvetica", 10))
-style.configure("TLabel", font=("Helvetica", 11))
+def launch_lang_selector():
+    global lang_window
+    lang_window = Tk()
+    lang_window.title("Language")
+    lang_window.geometry("300x150")
+    
+    ttk.Label(lang_window, text="Select Language / Seleccione Idioma", font=("Arial", 10)).pack(pady=20)
+    
+    btn_frame = ttk.Frame(lang_window)
+    btn_frame.pack(fill="x", padx=20)
+    
+    ttk.Button(btn_frame, text="English", command=lambda: set_lang("en")).pack(side="left", expand=True, padx=5)
+    ttk.Button(btn_frame, text="Español", command=lambda: set_lang("es")).pack(side="right", expand=True, padx=5)
+    
+    lang_window.mainloop()
 
-frame = ttk.Frame(root, padding=20)
-frame.pack(fill="both", expand=True)
+# =====================================================
+#  INTERFAZ PRINCIPAL (GUI)
+# =====================================================
 
-# Encabezado
-ttk.Label(frame, text="Configuración de Instalación", font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 10))
+def launch_main_gui():
+    global root, mode_var, tailscale_var, host_entry, output_box
+    
+    root = Tk()
+    root.title(t("title"))
+    root.geometry("750x650")
 
-# Selección de modo
-mode_frame = ttk.LabelFrame(frame, text="1. Elige el modo de uso", padding=10)
-mode_frame.pack(fill="x", pady=5)
+    frame = ttk.Frame(root, padding=20)
+    frame.pack(fill="both", expand=True)
 
-mode_var = IntVar(value=1)
-ttk.Radiobutton(mode_frame, text="🏠 Local (Solo mi PC / Wi-Fi)", variable=mode_var, value=1).pack(anchor="w")
-ttk.Radiobutton(mode_frame, text="🌍 Remoto (Compartir vía Tailscale)", variable=mode_var, value=2).pack(anchor="w")
+    ttk.Label(frame, text=t("title"), font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 10))
 
-tailscale_var = IntVar(value=1)
-ttk.Checkbutton(mode_frame, text="Instalar Tailscale automáticamente (Solo Linux)", variable=tailscale_var).pack(anchor="w", padx=20)
+    # Selección de modo
+    mode_frame = ttk.LabelFrame(frame, text=f"1. {t('mode_label')}", padding=10)
+    mode_frame.pack(fill="x", pady=5)
 
-# Host/IP
-host_frame = ttk.LabelFrame(frame, text="2. Dirección IP (Solo para modo Remoto)", padding=10)
-host_frame.pack(fill="x", pady=10)
+    mode_var = IntVar(value=1)
+    ttk.Radiobutton(mode_frame, text=t("mode_local"), variable=mode_var, value=1).pack(anchor="w")
+    ttk.Radiobutton(mode_frame, text=t("mode_remote"), variable=mode_var, value=2).pack(anchor="w")
 
-host_entry = ttk.Entry(host_frame)
-host_entry.pack(fill="x", pady=5)
-ttk.Label(host_frame, text="Ej: 100.85.x.x  (Dejar vacío para localhost:8080 en modo Local)", font=("Helvetica", 9, "italic")).pack(anchor="w")
+    tailscale_var = IntVar(value=1)
+    ttk.Checkbutton(mode_frame, text=t("tailscale_check"), variable=tailscale_var).pack(anchor="w", padx=20)
 
-# Botones de Acción
-action_frame = ttk.Frame(frame)
-action_frame.pack(fill="x", pady=20)
+    # Host/IP
+    host_frame = ttk.LabelFrame(frame, text=f"2. {t('host_label')}", padding=10)
+    host_frame.pack(fill="x", pady=10)
 
-btn_install = ttk.Button(action_frame, text="INSTALAR / REPARAR", command=start_install_thread)
-btn_install.pack(fill="x", ipady=5)
+    host_entry = ttk.Entry(host_frame)
+    host_entry.pack(fill="x", pady=5)
+    ttk.Label(host_frame, text=t("host_placeholder"), font=("Helvetica", 9, "italic")).pack(anchor="w")
 
-# Panel de Control
-control_frame = ttk.LabelFrame(frame, text="Panel de Control (Post-Instalación)", padding=10)
-control_frame.pack(fill="x", pady=10)
+    # Botones de Acción
+    action_frame = ttk.Frame(frame)
+    action_frame.pack(fill="x", pady=20)
 
-btn_start = ttk.Button(control_frame, text="Iniciar", command=start_server_thread)
-btn_start.pack(side="left", expand=True, fill="x", padx=5)
+    btn_install_w = ttk.Button(action_frame, text=t("btn_install"), command=start_install_thread)
+    btn_install_w.pack(fill="x", ipady=5)
 
-btn_stop = ttk.Button(control_frame, text="Detener (Ahorrar RAM)", command=stop_server_thread)
-btn_stop.pack(side="right", expand=True, fill="x", padx=5)
+    # Panel de Control
+    control_frame = ttk.LabelFrame(frame, text=t("control_panel"), padding=10)
+    control_frame.pack(fill="x", pady=10)
 
-# Log
-ttk.Label(frame, text="Registro de operaciones:", font=("Helvetica", 10, "bold")).pack(anchor="w")
-output_box = scrolledtext.ScrolledText(frame, height=12, state="disabled", font=("Consolas", 9))
-output_box.pack(fill="both", expand=True)
+    ttk.Button(control_frame, text=t("btn_start"), command=start_server_thread).pack(side="left", expand=True, fill="x", padx=5)
+    ttk.Button(control_frame, text=t("btn_stop"), command=stop_server_thread).pack(side="right", expand=True, fill="x", padx=5)
 
-root.mainloop()
+    # Log
+    ttk.Label(frame, text=t("log_label"), font=("Helvetica", 10, "bold")).pack(anchor="w")
+    output_box = scrolledtext.ScrolledText(frame, height=12, state="disabled", font=("Consolas", 9))
+    output_box.pack(fill="both", expand=True)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    launch_lang_selector()

@@ -1,68 +1,69 @@
 # 🍃 Overleaf Community Installer (Self-Hosted)
 
-Un instalador automatizado, seguro y con **interfaz gráfica** para desplegar tu propio servidor de **Overleaf Community Edition**.
+![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-Este script simplifica la configuración de Docker, la generación de secretos criptográficos y la conectividad remota (vía Tailscale), permitiéndote tener tu propio editor de LaTeX colaborativo sin límites de usuarios y bajo tu control.
+An automated, secure, and **GUI-based** installer to deploy your own **Overleaf Community Edition** server effortlessly.
 
-## ✨ Características
+This script handles Docker configuration, cryptographic secret generation, and remote connectivity (via Tailscale), allowing you to have your own real-time collaborative LaTeX editor without user limits and fully under your control.
 
-  * **🚀 Multiplataforma:** Funciona en **Arch Linux**, **Debian/Ubuntu**, **Windows** y **macOS**.
-  * **🖥️ Interfaz Gráfica (GUI):** Panel de control visual para instalar y gestionar el servidor sin comandos complejos.
-  * **🔄 Actualizado (v5.0):** Configura automáticamente **Overleaf 5.0** con **Mongo 8.0**, resolviendo los problemas de compatibilidad de versiones anteriores.
-  * **🔒 Seguridad Primero:** Generación automática de secretos, permisos seguros (0600) y validación estricta de inputs.
-  * **🌐 Soporte Remoto (Tailscale):** Integración nativa para instalar Tailscale en Linux, facilitando la colaboración remota segura.
-  * **⚡ Control de Recursos:** Incluye botones para **Detener** e **Iniciar** el servidor fácilmente cuando no lo uses (ahorra \~2GB de RAM).
+## ✨ Features
 
-## 📋 Requisitos Previos
+* **🚀 Multi-platform:** Works on **Arch Linux**, **Debian/Ubuntu**, **Windows**, and **macOS**.
+* **🖥️ GUI Control Panel:** User-friendly interface to install, start, and stop the server without complex CLI commands.
+* **🔄 Up-to-date (v5.0):** Automatically configures **Overleaf 5.0** with **Mongo 8.0**, solving compatibility issues from older manual setups.
+* **🔒 Security First:** Automated secure secret generation, 0600 permissions, and strict input validation.
+* **🌐 Remote Support (Tailscale):** Native integration to install/detect Tailscale on Linux for secure remote collaboration.
+* **⚡ Resource Control:** Includes buttons to **Stop** and **Start** the server easily to save RAM (~2GB) when not in use.
 
-Antes de ejecutar el script, asegúrate de tener instalado:
+## 📋 Prerequisites
 
-1.  **Git** y **Docker** (Docker Desktop en Windows/Mac, Docker Engine en Linux).
+Before running the script, ensure you have:
+
+1.  **Git** and **Docker** (Docker Desktop on Windows/Mac, Docker Engine on Linux).
 2.  **Python 3**.
-3.  **(Solo Linux) Librería Gráfica:**
-      * Arch Linux: `sudo pacman -S tk`
-      * Debian/Ubuntu: `sudo apt install python3-tk`
+3.  **(Linux Only) Tkinter:**
+    * Arch Linux: `sudo pacman -S tk`
+    * Debian/Ubuntu: `sudo apt install python3-tk`
 
-## 🚀 Uso Rápido
+## 🚀 Quick Start
 
-1.  Clona el repositorio o descarga `install_overleaf.py`:
-
+1.  Clone the repository:
     ```bash
-    git clone https://github.com/ffborgo/overleaf-installer.git
+    git clone [https://github.com/ffborgo/overleaf-installer.git](https://github.com/ffborgo/overleaf-installer.git)
     cd overleaf-installer
     ```
 
-2.  Ejecuta el instalador:
-
+2.  Run the installer:
     ```bash
     python install_overleaf.py
     ```
 
-3.  **Se abrirá una ventana gráfica.** Sigue las instrucciones:
+3.  **Select your Language** (English/Spanish) and follow the GUI instructions:
+    * Select **[1] Local** if you only use it on your Wi-Fi/PC.
+    * Select **[2] Remote** if you want to collaborate with friends via Internet (using Tailscale).
 
-      * Selecciona **[1] Local** si solo lo usarás en tu red Wi-Fi.
-      * Selecciona **[2] Remoto** si quieres colaborar con amigos a través de internet (usando Tailscale).
+## 🛠️ What does this script do?
 
-## 🛠️ ¿Qué hace este script?
+It automates the "DevOps" work for you:
 
-El script automatiza todo el proceso de "DevOps" que normalmente harías a mano:
+1.  **Cloning:** Downloads the official `overleaf/toolkit`.
+2.  **Configuration:** Generates `overleaf.env` and `docker-compose.yml` with the correct configuration for v5.0 (fixed paths and ports).
+3.  **Database:** Initializes the required MongoDB 8.0 *Replica Set*.
+4.  **Auto-Start:** Configures containers to start automatically with your PC (unless manually stopped via the GUI).
 
-1.  **Clonado:** Descarga el repositorio oficial `overleaf/toolkit`.
-2.  **Configuración:** Genera los archivos `overleaf.env` y `docker-compose.yml` con la configuración correcta para la versión 5.0 (rutas y puertos corregidos).
-3.  **Base de Datos:** Inicializa el *Replica Set* de MongoDB 8.0 necesario para que Overleaf arranque.
-4.  **Auto-Arranque:** Configura los contenedores para que inicien automáticamente con tu PC (a menos que los detengas manualmente).
+## ⚠️ Important Notes
 
-## ⚠️ Notas Importantes
+* **First Run:** The installation will download about **4GB** of data (Full TeX Live). Please be patient.
+* **Initial Boot:** Once installed, Overleaf takes 2-3 minutes to start all services. If you see a "Connection Error", wait a bit and refresh the page.
+* **Port:** Default is `8080`. If busy, the installer will alert you and let you change it.
 
-  * **Primera vez:** La instalación descargará cerca de **1GB** de datos (TeX Live completo). Ten paciencia, puede tardar unos minutos.
-  * **Espera Inicial:** Una vez instalado, Overleaf tarda unos 2-3 minutos en arrancar todos sus servicios. Si ves "Error de conexión" en el navegador, espera un poco y recarga la página.
-  * **Puerto:** Por defecto utiliza el `8080`. Si está ocupado, el instalador te avisará y te dejará cambiarlo.
+## 🤝 Contributing
 
-## 🤝 Contribuciones
+Contributions are welcome! If you find a bug or want to improve distro detection, feel free to open a Pull Request.
 
-Las contribuciones son bienvenidas. Si encuentras un bug o quieres mejorar la detección de distros, siéntete libre de abrir un Pull Request.
+## 📄 License
 
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT - eres libre de usarlo y modificarlo.
-*Overleaf es una marca registrada de Digital Science UK Limited. Este instalador es un proyecto comunitario no oficial.*
+This project is licensed under the MIT License.
+*Overleaf is a registered trademark of Digital Science UK Limited. This installer is an unofficial community project.*
