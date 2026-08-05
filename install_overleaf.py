@@ -17,13 +17,9 @@ from pathlib import Path
 # =====================================================
 
 REPO_URL = "https://github.com/overleaf/toolkit.git"
-
-# INSTALACIÓN EN CARPETA DE USUARIO (Ej: /home/juan/overleaf-server)
-# Esto mantiene limpio el directorio donde descargaste el script.
 INSTALL_DIR = Path.home() / "overleaf-server"
 DEFAULT_PORT = 8080
 
-# Regex para validar Hostnames y Direcciones IP
 ipv4_regex = re.compile(
     r"^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
     r"(25[0-5]|2[0-4]\d|[01]?\d\d?)$"
@@ -36,7 +32,7 @@ hostname_regex = re.compile(
 )
 
 # =====================================================
-#  TRADUCCIONES / TRANSLATIONS (SIN EMOJIS)
+#  TRADUCCIONES / TRANSLATIONS
 # =====================================================
 
 LANG = "en" 
@@ -116,16 +112,13 @@ def t(key):
 # =====================================================
 
 def log(msg):
-    """Escribe en la caja de texto de la GUI."""
     output_box.config(state="normal")
     output_box.insert(END, msg + "\n")
     output_box.see(END)
     output_box.config(state="disabled")
 
-
 def check_command(cmd):
     return shutil.which(cmd) is not None
-
 
 def check_docker_running():
     try:
@@ -137,15 +130,11 @@ def check_docker_running():
     except:
         return False
 
-
 def is_port_in_use(port):
-    """Devuelve True si el puerto está ocupado."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
-
 def sanitize_host_port(raw):
-    """Valida y limpia la entrada de Host/IP."""
     if ":" in raw:
         host, port_str = raw.rsplit(":", 1)
     else:
@@ -162,9 +151,7 @@ def sanitize_host_port(raw):
 
     return None
 
-
 def get_compose_cmd():
-    """Detecta si usar 'docker compose' o 'docker-compose'."""
     try:
         subprocess.run(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return ["docker", "compose"]
@@ -176,7 +163,6 @@ def get_compose_cmd():
 
     return None
 
-
 # =====================================================
 #  GESTIÓN DE RED Y TAILSCALE
 # =====================================================
@@ -184,7 +170,6 @@ def get_compose_cmd():
 def install_tailscale_linux():
     log("Tailscale native install...")
 
-    # Intentar gestores de paquetes comunes
     if check_command("pacman") and Path("/etc/arch-release").exists():
         subprocess.run(["sudo", "pacman", "-Sy", "--noconfirm", "tailscale"])
         return True
@@ -198,19 +183,16 @@ def install_tailscale_linux():
         subprocess.run(["sudo", "dnf", "install", "-y", "tailscale"])
         return True
 
-    # Fallback manual
     messagebox.showinfo("Manual Install",
                         "No package manager found.\nOpening browser for manual install.")
     webbrowser.open("https://tailscale.com/download/linux")
     return False
-
 
 # =====================================================
 #  GESTIÓN DE ARCHIVOS Y CONFIGURACIÓN
 # =====================================================
 
 def git_clone():
-    # Usamos INSTALL_DIR (ruta absoluta) en lugar de relativa
     if not INSTALL_DIR.exists():
         log(f"Cloning repo to {INSTALL_DIR}...")
         subprocess.run(["git", "clone", REPO_URL, str(INSTALL_DIR)], check=True)
@@ -219,11 +201,7 @@ def git_clone():
 
     os.chdir(INSTALL_DIR)
 
-
 def create_env(domain, port):
-    """Genera overleaf.env y docker-compose.yml con la configuración v5.0."""
-    
-    # 1. Archivo de Variables (.env)
     if os.path.exists("overleaf.env"):
         log(".env exists. Keeping config.")
     else:
@@ -243,12 +221,10 @@ OVERLEAF_PORT={port}
 """
         with open("overleaf.env", "w") as f:
             f.write(data)
-            # Permisos seguros solo en Linux/Mac
             if hasattr(os, "fchmod"):
                 os.fchmod(f.fileno(), 0o600)
         log(".env created.")
 
-    # 2. Archivo Docker Compose (Infraestructura)
     compose_content = f"""services:
   sharelatex:
     image: sharelatex/sharelatex:latest
@@ -292,9 +268,7 @@ OVERLEAF_PORT={port}
         f.write(compose_content)
     log("docker-compose.yml updated.")
 
-
 def init_mongo_replica():
-    """Inicializa el Replica Set requerido por Mongo 8.0."""
     log("Init Mongo (Wait 10s)...")
     time.sleep(10) 
     
@@ -309,7 +283,6 @@ def init_mongo_replica():
             
     except Exception as e:
         log(f"Mongo Init Error: {e}")
-
 
 # =====================================================
 #  FUNCIONES DE CONTROL (THREADS)
@@ -329,8 +302,6 @@ def start_server_thread():
     t = threading.Thread(target=only_start_server)
     t.daemon = True
     t.start()
-
-# --- Lógica de Control ---
 
 def stop_server():
     compose = get_compose_cmd()
@@ -363,7 +334,6 @@ def only_start_server():
 
 def run_install():
     try:
-        # 1. Validaciones Iniciales
         mode = mode_var.get()
         host = host_entry.get().strip()
         domain = f"localhost:{DEFAULT_PORT}"
@@ -381,8 +351,7 @@ def run_install():
             messagebox.showerror("Error", t("err_docker_run"))
             return
 
-        # 2. Configuración de Red (Tailscale / Local)
-        if mode == 2: # Remoto
+        if mode == 2:
             log("Remote Mode selected.")
             if sys.platform.startswith("linux"):
                 if tailscale_var.get():
@@ -403,7 +372,6 @@ def run_install():
                     return
                 domain = clean
 
-        # 3. Validación de Puerto
         try:
             port = int(domain.split(":")[1])
         except IndexError:
@@ -414,20 +382,25 @@ def run_install():
             if not messagebox.askyesno("Port Busy", t("warn_port").format(port)):
                 return
 
-        # 4. Proceso de Instalación
         log(t("log_init"))
-        
-        # Clonamos en la nueva ubicación (HOME/overleaf-server)
         git_clone()
-        
         create_env(domain, port)
 
         log(f"Docker Up ({port})...")
         log(t("log_dl"))
         
-        subprocess.run(compose + ["down"], check=True)
-        subprocess.run(compose + ["up", "-d"], check=True)
+        # --- LIMPIEZA PREVIA DE CONTENEDORES CONFLICTIVOS ---
+        # 1. Remueve contenedores huérfanos del proyecto compose
+        subprocess.run(compose + ["down", "--remove-orphans"], stderr=subprocess.DEVNULL)
         
+        # 2. Fuerza el borrado de contenedores antiguos/conflictivos
+        for container in ["sharelatex", "mongo", "redis"]:
+            subprocess.run(["docker", "rm", "-f", container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+        # 3. Despliega la infraestructura sin colisión de nombres
+        subprocess.run(compose + ["up", "-d"], check=True)
+        # --------------------------------------------------
+
         init_mongo_replica()
 
         url = f"http://{domain}"
@@ -436,13 +409,11 @@ def run_install():
         log(t("log_auto"))
         
         messagebox.showwarning(t("msg_final_title"), t("msg_final_body"))
-        
         webbrowser.open(url)
         
     except Exception as e:
         messagebox.showerror("Critical Error", f"{str(e)}")
         log(f"[ERROR] {str(e)}")
-
 
 # =====================================================
 #  LÓGICA DE SELECCIÓN DE IDIOMA
@@ -486,7 +457,6 @@ def launch_main_gui():
 
     ttk.Label(frame, text=t("title"), font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 10))
 
-    # Selección de modo
     mode_frame = ttk.LabelFrame(frame, text=f"1. {t('mode_label')}", padding=10)
     mode_frame.pack(fill="x", pady=5)
 
@@ -497,7 +467,6 @@ def launch_main_gui():
     tailscale_var = IntVar(value=1)
     ttk.Checkbutton(mode_frame, text=t("tailscale_check"), variable=tailscale_var).pack(anchor="w", padx=20)
 
-    # Host/IP
     host_frame = ttk.LabelFrame(frame, text=f"2. {t('host_label')}", padding=10)
     host_frame.pack(fill="x", pady=10)
 
@@ -505,21 +474,18 @@ def launch_main_gui():
     host_entry.pack(fill="x", pady=5)
     ttk.Label(host_frame, text=t("host_placeholder"), font=("Helvetica", 9, "italic")).pack(anchor="w")
 
-    # Botones de Acción
     action_frame = ttk.Frame(frame)
     action_frame.pack(fill="x", pady=20)
 
     btn_install_w = ttk.Button(action_frame, text=t("btn_install"), command=start_install_thread)
     btn_install_w.pack(fill="x", ipady=5)
 
-    # Panel de Control
     control_frame = ttk.LabelFrame(frame, text=t("control_panel"), padding=10)
     control_frame.pack(fill="x", pady=10)
 
     ttk.Button(control_frame, text=t("btn_start"), command=start_server_thread).pack(side="left", expand=True, fill="x", padx=5)
     ttk.Button(control_frame, text=t("btn_stop"), command=stop_server_thread).pack(side="right", expand=True, fill="x", padx=5)
 
-    # Log
     ttk.Label(frame, text=t("log_label"), font=("Helvetica", 10, "bold")).pack(anchor="w")
     output_box = scrolledtext.ScrolledText(frame, height=12, state="disabled", font=("Consolas", 9))
     output_box.pack(fill="both", expand=True)
